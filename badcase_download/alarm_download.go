@@ -9,12 +9,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
@@ -70,6 +68,23 @@ type EsSearchRes struct {
 type AtomicInt struct {
 	value int
 	lock  sync.Mutex
+}
+
+func DownloadFile(url, filename string) {
+	r, err := http.Get(url)
+	if err != nil {
+		panic(err)
+	}
+	defer r.Body.Close()
+
+	f, err := os.Create(filename)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	_, _ = io.Copy(f, r.Body)
+
 }
 
 func (a *AtomicInt) Increment() {
@@ -143,17 +158,6 @@ func IsContain(items []string, item string) bool {
 	return false
 }
 
-func DownloadFile(URL string, fileName string) {
-	resp, _ := http.Get(URL)
-	body, _ := ioutil.ReadAll(resp.Body)
-	out, _ := os.Create(fileName)
-	defer out.Close()
-	_, err := io.Copy(out, bytes.NewReader(body))
-	if err != nil {
-		log.Printf("下载文件报错[%s],error is %v", URL, err)
-	}
-}
-
 func DownloadImage(imageURL string, workDirPath string, caseNumber string) {
 	imageName := workDirPath + SLASH + caseNumber + JPG
 	DownloadFile(imageURL, imageName)
@@ -163,6 +167,7 @@ func DownloadImage(imageURL string, workDirPath string, caseNumber string) {
 func DownloadVideo(videoURL string, workDirPath string, caseNumber string) {
 	videoName := workDirPath + SLASH + caseNumber + MP4
 	DownloadFile(videoURL, videoName)
+	log.Printf("<<<<<download event [%s] video success>>>>>", caseNumber)
 }
 
 func ZipDir(dir, zipFile string) {
@@ -171,10 +176,10 @@ func ZipDir(dir, zipFile string) {
 	if err != nil {
 		log.Fatalf("Create zip file failed: %s\n", err.Error())
 	}
-	defer fz.Close()
+	go func() { defer fz.Close() }()
 
 	w := zip.NewWriter(fz)
-	defer w.Close()
+	go func() { defer w.Close() }()
 
 	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if !info.IsDir() {
@@ -199,14 +204,8 @@ func ZipDir(dir, zipFile string) {
 	})
 }
 
-func Decimal(value float64) float64 {
-	value, _ = strconv.ParseFloat(fmt.Sprintf("%.2f", value), 64)
-	return value
-}
-
 func DoWork(doc Document, config CoreConfig, downloadParentPath string,
-	alreadyDownloadCaseNumber []string, wg *sync.WaitGroup, currentCount *AtomicInt, total int) {
-	defer wg.Done()
+	alreadyDownloadCaseNumber []string, currentCount *AtomicInt, total int) {
 	event := doc.Source
 	caseNumber := event["caseNumber"].(string)
 	if IsContain(alreadyDownloadCaseNumber, caseNumber) {
@@ -324,26 +323,6 @@ func ReadFileTransferToEventCaseNumberArr(fileName string) []string {
 	return res
 }
 
-func splitArray(arr []Document, num int64) [][]Document {
-	max := int64(len(arr))
-	if max < num {
-		return nil
-	}
-	var segments = make([][]Document, 0)
-	quantity := max / num
-	end := int64(0)
-	for i := int64(1); i <= num; i++ {
-		qu := i * quantity
-		if i != num {
-			segments = append(segments, arr[i-1+end:qu])
-		} else {
-			segments = append(segments, arr[i-1+end:])
-		}
-		end = qu - i
-	}
-	return segments
-}
-
 func main() {
 	start := time.Now()
 	v := viper.New()
@@ -382,12 +361,9 @@ func main() {
 		lock:  sync.Mutex{},
 	}
 	totalCount := len(docs)
-	wg := sync.WaitGroup{}
-	wg.Add(totalCount)
 	for _, doc := range docs {
-		go DoWork(doc, config.Core, downloadParentPath, downloadedEventArr, &wg, &currentCount, totalCount)
+		DoWork(doc, config.Core, downloadParentPath, downloadedEventArr, &currentCount, totalCount)
 	}
-	wg.Wait()
 
 	log.Printf("总共耗时[%s]", time.Since(start))
 }

@@ -3,7 +3,7 @@ es:
   user: 'elastic'
   password: 'QcYfRDraTCr'
   search_index: 'megcity-event-*'
-  search_dsl: '{"query":{"match_all":{}},"size":10}'
+  search_dsl: '{"query":{"match_all":{}},"size":100}'
 core:
   image_url_prefix: 'http://10.122.100.111:8080/v5/resources/data?uri=%s&ContentType=image/jpeg'
   video_url_prefix: 'http://10.122.100.111:8080/v5/resources/data?uri=%s&ContentType=video/mp4'

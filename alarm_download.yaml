@@ -1,11 +1,11 @@
 es:
-  host: 'https://10.122.100.111:9200'
+  host: 'https://10.122.100.240:9200'
   user: 'elastic'
-  password: 'QcYfRDraTCr'
+  password: '1TLQ1k0YSdE'
   search_index: 'megcity-event-*'
-  search_dsl: '{"query":{"match_all":{}},"size":100}'
+  search_dsl: '{"query":{"match_all":{}},"size":1000}'
 core:
-  image_url_prefix: 'http://10.122.100.111:8080/v5/resources/data?uri=%s&ContentType=image/jpeg'
-  video_url_prefix: 'http://10.122.100.111:8080/v5/resources/data?uri=%s&ContentType=video/mp4'
-  video_download_flag: true
+  image_url_prefix: 'http://10.122.100.240:8080/v5/resources/data?uri=%s&ContentType=image/jpeg'
+  video_url_prefix: 'http://10.122.100.240:8080/v5/resources/data?uri=%s&ContentType=video/mp4'
+  video_download_flag: false
   zip_flag: true
