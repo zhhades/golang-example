@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -25,7 +26,9 @@ func GetVideos(url string, listVideoRes *ListVideoRes) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
 	body, _ := ioutil.ReadAll(resp.Body)
 	if err := json.Unmarshal(body, listVideoRes); err != nil {
 		fmt.Println(err.Error())
@@ -47,17 +50,17 @@ func main() {
 		allVideo = append(allVideo, listVideoRes.Videos...)
 	}
 	log.Printf("获取到所有的解析设备，解析设备列表大小为%d\n", len(allVideo))
-	num := 0
+	countMap := make(map[string]int)
+	detailMap := make(map[string][]string)
 	for _, video := range allVideo {
-		if video.Status == "VIDEO_PROCESSING" {
-			num++
-			log.Println(video.Name)
+		countMap[video.Status] += 1
+		if video.Status == "VIDEO_PROCESSING" || video.Status == "VIDEO_ERROR" || video.Status == "VIDEO_PREPARING" {
+			detailMap[video.Status] = append(detailMap[video.Status], video.Name)
 		}
 	}
-	if num == 0 {
-		log.Println("没有正在进行解析的设备")
-	} else {
-		log.Printf("共有%d路设备正在解析")
-	}
+	indent, _ := json.MarshalIndent(countMap, "", "\t")
+	log.Println(string(indent))
 
+	indent, _ = json.MarshalIndent(detailMap, "", "\t")
+	log.Println(string(indent))
 }
