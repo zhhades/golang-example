@@ -7,6 +7,7 @@ require (
 	github.com/elastic/go-elasticsearch/v7 v7.14.0
 	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gin-gonic/gin v1.7.3
+	github.com/hashicorp/go-getter v1.5.7 // indirect
 	github.com/kirinlabs/HttpRequest v1.1.1
 	github.com/olivere/elastic/v7 v7.0.27
 	github.com/spf13/viper v1.8.1

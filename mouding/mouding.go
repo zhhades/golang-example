@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/md5"
 	"encoding/json"
 	"fmt"
@@ -24,7 +23,7 @@ type EventReq struct {
 	CompanyId   int         `json:"com_id"`
 	CompanyKey  string      `json:"com_key"`
 	Platform    string      `json:"platform"`
-	SignTime    int64       `json:"signtime"`
+	SignTime    int         `json:"signtime"`
 	Sign        string      `json:"sign"`
 	Pics        []string    `json:"pics"`
 	AddressInfo AddressInfo `json:"address"`
@@ -34,7 +33,9 @@ type EventReq struct {
 }
 
 func MD5(s string) string {
-	return fmt.Sprintf("%x", md5.Sum([]byte(s)))
+	str := fmt.Sprintf("%x", md5.Sum([]byte(s)))
+	fmt.Println(str)
+	return str
 }
 
 func sortedMap(m map[string]interface{}, f func(k string, v interface{})) {
@@ -48,7 +49,7 @@ func sortedMap(m map[string]interface{}, f func(k string, v interface{})) {
 	}
 }
 
-func Sign(req *EventReq, timeSecond int64) string {
+func Sign(req *EventReq, timeSecond int) string {
 	jsonStr, _ := json.Marshal(req.AddressInfo)
 	addressStr := string(jsonStr)
 	fmtStr := fmt.Sprintf("address=%s&com_id=%d&com_key=%s&content=%s&event_type_name=%s&level_name=%s&signtime=%d",
@@ -61,7 +62,6 @@ func Sign(req *EventReq, timeSecond int64) string {
 	//URLEncoder.encode(params_str,"UTF-8").replace("*","%2A").replace("+","%20").replace("%7E","~");
 	//md5((com_id + md5(params_encode_str) + com_key))
 	sign := MD5(fmt.Sprintf("%s%s%s", strconv.Itoa(req.CompanyId), MD5(encodeStr), req.CompanyKey))
-	fmt.Println(sign)
 	return sign
 }
 
@@ -74,7 +74,8 @@ func unicodeDecode(raw []byte) ([]byte, error) {
 }
 
 func main() {
-	timeSecond := time.Now().Unix() - 66
+	timeSecond := int(time.Now().UnixNano() / 1e6)
+	//timeSecond := 1630312077
 	eventReq := EventReq{
 		CompanyId:  250,
 		CompanyKey: "38I14Tifq5pMX0RH",
@@ -93,15 +94,25 @@ func main() {
 		EventType: "非机动车违章停车",
 	}
 	signStr := Sign(&eventReq, timeSecond)
-	eventReq.Sign = signStr
 
+	data := url.Values{}
+	data.Set("com_id", strconv.Itoa(250))
+	data.Set("com_key", "38I14Tifq5pMX0RH")
+	data.Set("address", "{\"lat\":\"30.498393\",\"lng\":\"114.546884\",\"location\":\"武汉未来科技城\"}")
+	data.Set("content", "对接测试")
+	data.Set("event_type_name", "非机动车违章停车")
+	data.Set("level_name", "高")
+	data.Set("signtime", strconv.Itoa(timeSecond))
+	data.Set("sign", signStr)
+
+	eventReq.Sign = signStr
 	URL := "http://zf.zftest.xbcx.com.cn/wq/openapi/task/collect/report"
 	headMap := map[string]string{
-		"Content-Type": "application/json;charset=UTF-8",
+		"Content-Type": "application/x-www-form-urlencoded",
 	}
 	reqBodyJson, _ := json.Marshal(eventReq)
 	fmt.Println(string(reqBodyJson))
-	req, _ := http.NewRequest("POST", URL, bytes.NewBuffer(reqBodyJson))
+	req, _ := http.NewRequest("POST", URL, strings.NewReader(data.Encode()))
 	for k, v := range headMap {
 		req.Header.Set(k, v)
 	}

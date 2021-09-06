@@ -40,6 +40,7 @@ func main() {
 	unixTime := time.Now().UnixNano() / 1e6
 	startURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040004262/monitor-start"
 	continueURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040004262/monitor-continue"
+	LocationURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040004262/realtime?timestamp=%d&sign=%s"
 	headMap := map[string]string{
 		"Content-Type": "application/json;charset=UTF-8",
 		"sysCode":      "30007",
@@ -48,12 +49,24 @@ func main() {
 	}
 
 	MonitorStart(unixTime, startURL, headMap)
-	for {
-		unixTime = time.Now().UnixNano() / 1e6
-		headMap["msgId"] = strconv.FormatInt(unixTime, 10)
-		MonitorContinue(unixTime, continueURL, headMap)
-		time.Sleep(1 * time.Minute)
-	}
+
+	go func() {
+		for {
+			GetLocation(unixTime, LocationURL)
+			time.Sleep(5 * time.Second)
+		}
+	}()
+
+	go func() {
+		for {
+			unixTime = time.Now().UnixNano() / 1e6
+			headMap["msgId"] = strconv.FormatInt(unixTime, 10)
+			MonitorContinue(unixTime, continueURL, headMap)
+			time.Sleep(1 * time.Minute)
+		}
+	}()
+
+	time.Sleep(time.Hour * 24)
 
 }
 
@@ -82,6 +95,29 @@ func MonitorContinue(unixTime int64, continueURL string, headMap map[string]stri
 	fmt.Println("response Status:", resp.Status)
 	fmt.Println("response Body:", string(body))
 
+}
+
+func GetLocation(unixTime int64, url string) {
+	headMap := map[string]string{
+		"sysCode": "30007",
+		"from":    "OTHER",
+		"msgId":   strconv.FormatInt(unixTime, 10),
+	}
+	signStr := sign("", unixTime, "I51#H!44uR3")
+	req, _ := http.NewRequest("GET", fmt.Sprintf(url, unixTime, signStr), nil)
+	for k, v := range headMap {
+		req.Header.Set(k, v)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	fmt.Println("response Status:", resp.Status)
+	fmt.Println("response Body:", string(body))
 }
 
 func MonitorStart(unixTime int64, startURL string, headMap map[string]string) {

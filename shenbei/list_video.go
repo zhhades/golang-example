@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"os"
+	"sync"
 )
 
 type Video struct {
@@ -16,12 +19,53 @@ type Video struct {
 	Name   string `json:"name"`
 }
 
+type VideoCount struct {
+	Data VideoCountData `json:"data"`
+}
+
+type VideoCountData struct {
+	Total int `json:"total"`
+}
+
 type ListVideoRes struct {
 	Videos        []Video `json:"videos"`
 	NextPageToken string  `json:"nextPageToken"`
 }
 
-func GetVideos(url string, listVideoRes *ListVideoRes) {
+func GetVideoCount(url string) int {
+
+	headMap := map[string]string{
+		"Authorization": "59dacfac729esuperadmin427f90bfa98c0a636e0c",
+	}
+
+	req, _ := http.NewRequest("POST", url, nil)
+	for k, v := range headMap {
+		req.Header.Set(k, v)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Println(err.Error())
+	}
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(resp.Body)
+	body, _ := ioutil.ReadAll(resp.Body)
+	videoCount := &VideoCount{}
+	if err := json.Unmarshal(body, videoCount); err != nil {
+		fmt.Println(err.Error())
+	}
+	return videoCount.Data.Total
+}
+
+func GetVideos(wg *sync.WaitGroup, url string, listVideoResChan chan *ListVideoRes) {
+	defer wg.Done()
+	listVideoRes := &ListVideoRes{}
+	DoGetVideos(url, listVideoRes)
+	listVideoResChan <- listVideoRes
+}
+
+func DoGetVideos(url string, listVideoRes *ListVideoRes) {
 	resp, err := http.Get(url)
 	if err != nil {
 		fmt.Println(err)
@@ -35,18 +79,58 @@ func GetVideos(url string, listVideoRes *ListVideoRes) {
 	}
 }
 
+type Config struct {
+	host     string
+	pageSize int
+	h        bool
+}
+
+func usage() {
+	fmt.Fprintf(os.Stderr, `Usage: list_video.exe -host 127.0.0.1 -size 100
+`)
+	flag.PrintDefaults()
+}
+
+var cfg Config
+
+func init() {
+
+	flag.StringVar(&cfg.host, "host", "", "must set host")
+	flag.IntVar(&cfg.pageSize, "size", 100, "set pageSize")
+	flag.BoolVar(&cfg.h, "h", false, "this help")
+	flag.Usage = usage
+}
+
 func main() {
+	flag.Parse()
+	if cfg.h {
+		flag.Usage()
+		return
+	}
+
+	if cfg.host == "" {
+		log.Println("please set the host")
+		flag.Usage()
+		return
+	}
+
 	allVideo := make([]Video, 0)
-	pageSize := 1000
 	offset := 0
-	url := "http://172.99.3.229:8080/v5/videos?pageSize=%d&pageOffset=%d"
-	listVideoRes := &ListVideoRes{}
-	GetVideos(fmt.Sprintf(url, pageSize, offset), listVideoRes)
-	allVideo = append(allVideo, listVideoRes.Videos...)
-	for len(listVideoRes.Videos) > 0 {
-		offset += pageSize
-		tmpUrl := fmt.Sprintf(url, pageSize, offset)
-		GetVideos(tmpUrl, listVideoRes)
+	videoUrl := "http://%s:8080/v5/videos?pageSize=%d&pageOffset=%d"
+	videoCountUrl := "http://%s/api/rainbow/v1/device/cameras:statistics"
+	total := GetVideoCount(fmt.Sprintf(videoCountUrl, cfg.host))
+
+	listVideoResChan := make(chan *ListVideoRes, total/cfg.pageSize+1)
+	wg := &sync.WaitGroup{}
+	for i := 0; i <= total/cfg.pageSize; i++ {
+		wg.Add(1)
+		offset = cfg.pageSize * i
+		go GetVideos(wg, fmt.Sprintf(videoUrl, cfg.host, cfg.pageSize, offset), listVideoResChan)
+	}
+	log.Println("等待获取所有设备结果")
+	wg.Wait()
+	close(listVideoResChan)
+	for listVideoRes := range listVideoResChan {
 		allVideo = append(allVideo, listVideoRes.Videos...)
 	}
 	log.Printf("获取到所有的解析设备，解析设备列表大小为%d\n", len(allVideo))
