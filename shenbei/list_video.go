@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -24,21 +25,26 @@ type VideoCount struct {
 }
 
 type VideoCountData struct {
-	Total int `json:"total"`
+	Total int `json:"totalRecords"`
 }
 
 type ListVideoRes struct {
-	Videos        []Video `json:"videos"`
-	NextPageToken string  `json:"nextPageToken"`
+	Videos []Video `json:"videos"`
 }
 
 func GetVideoCount(url string) int {
 
 	headMap := map[string]string{
 		"Authorization": "59dacfac729esuperadmin427f90bfa98c0a636e0c",
+		"Content-Type":  "application/json;charset=UTF-8",
 	}
-
-	req, _ := http.NewRequest("POST", url, nil)
+	reqBody := map[string]interface{}{
+		"action":   "all",
+		"pageNo":   1,
+		"pageSize": 1,
+	}
+	reqBodyJson, _ := json.Marshal(reqBody)
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(reqBodyJson))
 	for k, v := range headMap {
 		req.Header.Set(k, v)
 	}
@@ -117,9 +123,8 @@ func main() {
 	allVideo := make([]Video, 0)
 	offset := 0
 	videoUrl := "http://%s:8080/v5/videos?pageSize=%d&pageOffset=%d"
-	videoCountUrl := "http://%s/api/rainbow/v1/device/cameras:statistics"
+	videoCountUrl := "http://%s/api/galaxy/v1/device/cameras:search"
 	total := GetVideoCount(fmt.Sprintf(videoCountUrl, cfg.host))
-
 	listVideoResChan := make(chan *ListVideoRes, total/cfg.pageSize+1)
 	wg := &sync.WaitGroup{}
 	for i := 0; i <= total/cfg.pageSize; i++ {

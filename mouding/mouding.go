@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"sort"
@@ -75,6 +76,7 @@ func unicodeDecode(raw []byte) ([]byte, error) {
 
 func main() {
 	timeSecond := int(time.Now().UnixNano() / 1e6)
+	log.Println(timeSecond)
 	//timeSecond := 1630312077
 	eventReq := EventReq{
 		CompanyId:  250,
@@ -93,6 +95,7 @@ func main() {
 		Level:     "高",
 		EventType: "非机动车违章停车",
 	}
+	marshal, _ := json.Marshal(eventReq.Pics)
 	signStr := Sign(&eventReq, timeSecond)
 
 	data := url.Values{}
@@ -104,14 +107,14 @@ func main() {
 	data.Set("level_name", "高")
 	data.Set("signtime", strconv.Itoa(timeSecond))
 	data.Set("sign", signStr)
+	data.Set("pics", string(marshal))
 
 	eventReq.Sign = signStr
 	URL := "http://zf.zftest.xbcx.com.cn/wq/openapi/task/collect/report"
 	headMap := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	reqBodyJson, _ := json.Marshal(eventReq)
-	fmt.Println(string(reqBodyJson))
+	fmt.Println(data)
 	req, _ := http.NewRequest("POST", URL, strings.NewReader(data.Encode()))
 	for k, v := range headMap {
 		req.Header.Set(k, v)

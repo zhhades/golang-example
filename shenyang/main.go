@@ -7,6 +7,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/suifengtec/gocoord"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -24,6 +27,18 @@ type MonitorStartParam struct {
 	StreamMode int    `json:"streamMode"`
 }
 
+type GPS struct {
+	Longitude   float64 `json:"longitude" gorm:"type:varchar(20) column:longitude"`
+	LongitudeBD float64 `gorm:"type:varchar(20) column:longitudeBD"`
+	Latitude    float64 `json:"latitude" gorm:"type:varchar(20) column:latitude"`
+	LatitudeBD  float64 `gorm:"type:varchar(20) column:latitudeBD"`
+	GpsTime     int64   `json:"gpsTime" gorm:"type:bigint column:gps_time"`
+}
+
+func (g GPS) TableName() string {
+	return "tb_gps_log"
+}
+
 func SHA1(s string) string {
 	h := sha1.New()
 	h.Write([]byte(s))
@@ -36,11 +51,36 @@ func sign(reqBody string, time int64, signatureKey string) string {
 	return SHA1(str)
 }
 
+var _db *gorm.DB
+
+func init() {
+	username := "root"
+	password := "5zgmvzXY3fY"
+	host := "10.122.100.146"
+	port := 3306
+	Dbname := "test"
+	timeout := "100s"
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&timeout=%s", username, password, host, port, Dbname, timeout)
+	var err error
+	_db, err = gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		panic("连接数据库失败, error=" + err.Error())
+	}
+	sqlDB, _ := _db.DB()
+	sqlDB.SetMaxOpenConns(100)
+	sqlDB.SetMaxIdleConns(20)
+}
+
+func GetDB() *gorm.DB {
+	return _db
+}
+
 func main() {
 	unixTime := time.Now().UnixNano() / 1e6
-	startURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040004262/monitor-start"
-	continueURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040004262/monitor-continue"
-	LocationURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040004262/realtime?timestamp=%d&sign=%s"
+	startURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040006697/monitor-start"
+	continueURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040006697/monitor-continue"
+	LocationURL := "https://portal.anddrive.cn/api/v0/thirdpart/terminals/860404040006697/realtime?timestamp=%d&sign=%s"
 	headMap := map[string]string{
 		"Content-Type": "application/json;charset=UTF-8",
 		"sysCode":      "30007",
@@ -53,7 +93,7 @@ func main() {
 	go func() {
 		for {
 			GetLocation(unixTime, LocationURL)
-			time.Sleep(5 * time.Second)
+			time.Sleep(1 * time.Second)
 		}
 	}()
 
@@ -90,10 +130,7 @@ func MonitorContinue(unixTime int64, continueURL string, headMap map[string]stri
 		panic(err)
 	}
 	defer resp.Body.Close()
-
-	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Body:", string(body))
+	fmt.Println("续期 Status:", resp.Status)
 
 }
 
@@ -116,8 +153,15 @@ func GetLocation(unixTime int64, url string) {
 	defer resp.Body.Close()
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Status:", resp.Status)
-	fmt.Println("response Body:", string(body))
+	gps := GPS{}
+	json.Unmarshal(body, &gps)
+	p := gocoord.Position{Lon: gps.Longitude, Lat: gps.Latitude}
+	bd09 := gocoord.WGS84ToBD09(p)
+	gps.LongitudeBD = bd09.Lon
+	gps.LatitudeBD = bd09.Lat
+	db := GetDB()
+	db.Create(&gps)
+	fmt.Println("gps Status:", resp.Status)
 }
 
 func MonitorStart(unixTime int64, startURL string, headMap map[string]string) {
@@ -150,5 +194,5 @@ func MonitorStart(unixTime int64, startURL string, headMap map[string]string) {
 	defer resp.Body.Close()
 
 	body, _ := ioutil.ReadAll(resp.Body)
-	fmt.Println("response Body:", string(body))
+	fmt.Println("开流 Body:", string(body))
 }
